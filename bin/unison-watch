@@ -1,0 +1,157 @@
+#!/usr/bin/env ruby
+
+require 'bundler/setup'
+
+require 'Qt4'
+require 'rb-fsevent'
+require 'thread'
+require 'atomic'
+require 'daemons'
+
+
+ENV['PROFILE'] ||= 'default'
+
+
+TRANSFER_LOG = '~/unison.log'
+SYNC_CHECK_COUNT = 600
+SYNC_CHECK_TIME = 0.1
+
+@queue = Atomic.new([])
+
+def <<(dirs)
+  @queue.update { |q| q += dirs ; q }
+end
+public :<<
+
+def check
+  remote_sync_check = SYNC_CHECK_COUNT
+
+  Thread.new do
+    while true do
+      begin
+        if @queue.value.length > 0 || remote_sync_check == 0
+          dir = nil
+          @queue.update { |q| ; dir = q.shift ; q }
+
+          @status.text = "Syncing..."
+
+          animation = Thread.new do
+            while !Thread.current[:done] do
+              @current_icon = 'working-1'
+              sleep 0.25
+              @current_icon = 'working-2'
+              sleep 0.25
+            end
+
+            @current_icon = 'idle'
+          end
+
+          system %{bash -c 'unison -batch default'}
+
+          animation[:done] = true
+
+          remote_sync_check = SYNC_CHECK_COUNT
+        end
+      rescue => e
+        puts e.message
+        puts e.backtrace.join("\n")
+        exit
+      end
+
+      remote_sync_check -= 1
+      check_text = "Next check in #{sprintf("%.0d", SYNC_CHECK_TIME * remote_sync_check)} secs."
+      @status.text = check_text
+
+      sleep SYNC_CHECK_TIME
+    end
+  end
+end
+
+class UnisonProfile
+  def initialize(which = ENV['PROFILE'])
+    @which = which
+  end
+
+  def local_root
+    roots.find { |root| root[%r{^/}] }
+  end
+
+  def roots
+    @roots ||= lines.find_all { |line| line[%r{^root}] }.collect { |line| value_of(line) }
+  end
+
+  def lines
+    @lines ||= File.readlines(File.expand_path("~/.unison/#{@which}.prf"))
+  end
+
+  def paths
+    @paths ||= lines.find_all { |line| line[%r{^path}] }.collect { |line| value_of(line) }
+  end
+
+  def value_of(line)
+    line[%r{=(.*)$}, 1].strip
+  end
+end
+
+profile = UnisonProfile.new
+
+watcher = Thread.new do
+  while !Thread.current[:app]; sleep 0.1; end
+
+  begin
+    watch = FSEvent.new
+    watch.watch Thread.current[:paths], :latency => 0.25 do |directories|
+      Thread.current[:app] << directories
+    end
+    watch.run
+  rescue => e
+    puts e.message
+    puts e.backtrace.join("\n")
+    exit
+  end
+end
+
+app = Qt::Application.new(ARGV)
+
+watcher[:paths] = profile.paths.collect { |path| File.join(profile.local_root, path) }
+watcher[:app] = self
+
+menu = Qt::Menu.new
+
+@status = Qt::Action.new("Unison watch idle.", menu)
+@status.enabled = false
+
+log = Qt::Action.new("View transfer log", menu)
+log.connect(SIGNAL :triggered) { system %{open #{TRANSFER_LOG}} }
+
+exiting = false
+
+quit = Qt::Action.new("Quit", menu)
+quit.connect(SIGNAL :triggered) { exiting = true }
+
+menu.addAction @status
+menu.addSeparator
+menu.addAction log
+menu.addAction quit
+
+icon = Qt::SystemTrayIcon.new
+icon.contextMenu = menu
+
+@current_icon = 'idle'
+@prior_icon = nil
+
+check
+
+while !exiting
+  log.enabled = File.file?(File.expand_path(TRANSFER_LOG))
+  if @current_icon != @prior_icon
+    icon.icon = Qt::Icon.new(File.expand_path("../../assets/#{@current_icon}.png", __FILE__))
+
+    icon.show if !@prior_icon
+    @prior_icon = @current_icon
+  end
+
+  app.processEvents
+  sleep 0.1
+end
+
