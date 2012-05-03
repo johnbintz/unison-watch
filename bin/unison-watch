@@ -178,7 +178,10 @@ while !exiting
   if @current_icon != @prior_icon
     icon.icon = Qt::Icon.new(File.expand_path("../../assets/#{@current_icon}.png", __FILE__))
 
-    icon.show if !@prior_icon
+    if !@prior_icon
+      icon.show
+    end
+
     @prior_icon = @current_icon
   end
 
