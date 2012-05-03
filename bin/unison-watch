@@ -17,7 +17,7 @@ SYNC_CHECK_TIME = 0.1
 @sync_now = false
 
 def <<(dirs)
-  @queue.update { |q| q += dirs ; q }
+  @queue.update { |q| q += [ dirs ].flatten ; q }
 end
 public :<<
 
@@ -29,7 +29,6 @@ def check
       begin
         if @queue.value.length > 0 || remote_sync_check == 0 || @sync_now
           dir = nil
-          @queue.update { |q| ; dir = q.shift ; q }
 
           @status.text = "Syncing..."
 
@@ -50,6 +49,7 @@ def check
 
           remote_sync_check = SYNC_CHECK_COUNT
           @sync_now = false
+          @queue.update { [] }
         end
       rescue => e
         puts e.message
