@@ -113,8 +113,6 @@ watcher = Thread.new do
   begin
     @watch = nil
 
-    p Thread.current[:paths]
-
     case RbConfig::CONFIG['host_os']
     when /darwin/
       require 'rb-fsevent'
