@@ -3,14 +3,11 @@
 require 'bundler/setup'
 
 require 'Qt4'
-require 'rb-fsevent'
 require 'thread'
 require 'atomic'
 require 'daemons'
 
-
 ENV['PROFILE'] ||= 'default'
-
 
 TRANSFER_LOG = '~/unison.log'
 SYNC_CHECK_COUNT = 600
@@ -46,7 +43,7 @@ def check
             @current_icon = 'idle'
           end
 
-          system %{bash -c 'unison -batch default'}
+          system %{bash -c 'unison -log -logfile #{TRANSFER_LOG} -batch #{ENV['PROFILE']}'}
 
           animation[:done] = true
 
@@ -94,15 +91,31 @@ class UnisonProfile
 end
 
 profile = UnisonProfile.new
+require 'rbconfig'
 
 watcher = Thread.new do
   while !Thread.current[:app]; sleep 0.1; end
 
   begin
-    watch = FSEvent.new
-    watch.watch Thread.current[:paths], :latency => 0.25 do |directories|
-      Thread.current[:app] << directories
+    watch = nil
+
+    case RbConfig::CONFIG['host_os']
+    when /darwin/
+      require 'rb-fsevent'
+      watch = FSEvent.new
+      watch.watch Thread.current[:paths], :latency => 0.25 do |directories|
+        Thread.current[:app] << directories
+      end
+    when /linux/
+      require 'rb-inotify'
+      watch = INotify::Notifier.new
+      Thread.current[:paths].each do |path|
+        notifier.watch path, :recursive, :modify, :create, :delete do |event|
+          Thread.current[:app] << event.absolute_name
+        end
+      end
     end
+
     watch.run
   rescue => e
     puts e.message

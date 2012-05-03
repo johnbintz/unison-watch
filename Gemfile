@@ -1,7 +1,15 @@
 source :rubygems
 
 gem 'qtbindings'
-gem 'rb-fsevent'
+require 'rbconfig'
+
+case RbConfig::CONFIG['host_os']
+when /darwin/
+  gem 'rb-fsevent'
+when /linux/
+  gem 'rb-inotify'
+end
+
 gem 'atomic'
 gem 'daemons'
 
