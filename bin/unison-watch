@@ -80,7 +80,19 @@ class UnisonProfile
   end
 
   def lines
-    @lines ||= File.readlines(File.expand_path("~/.unison/#{@which}.prf"))
+    return @lines if @lines
+
+    @lines = File.readlines(File.expand_path("~/.unison/#{@which}.prf"))
+
+    includes = []
+
+    @lines.each do |line|
+      if file = line[%r{^include (.*)}, 1]
+        includes += File.readlines(File.expand_path("~/.unison/#{file}"))
+      end
+    end
+
+    @lines += includes
   end
 
   def paths
@@ -99,26 +111,28 @@ watcher = Thread.new do
   while !Thread.current[:app]; sleep 0.1; end
 
   begin
-    watch = nil
+    @watch = nil
+
+    p Thread.current[:paths]
 
     case RbConfig::CONFIG['host_os']
     when /darwin/
       require 'rb-fsevent'
-      watch = FSEvent.new
-      watch.watch Thread.current[:paths], :latency => 0.25 do |directories|
+      @watch = FSEvent.new
+      @watch.watch Thread.current[:paths], :latency => 0.1 do |directories|
         Thread.current[:app] << directories
       end
     when /linux/
       require 'rb-inotify'
-      watch = INotify::Notifier.new
+      @watch = INotify::Notifier.new
       Thread.current[:paths].each do |path|
-        notifier.watch path, :recursive, :modify, :create, :delete do |event|
+        @watch.watch path, :recursive, :modify, :create, :delete do |event|
           Thread.current[:app] << event.absolute_name
         end
       end
     end
 
-    watch.run
+    @watch.run
   rescue => e
     puts e.message
     puts e.backtrace.join("\n")
