@@ -27,7 +27,7 @@ def check
   Thread.new do
     while true do
       begin
-        if @queue.value.length > 0 || remote_sync_check == 0 || @sync_now
+        if @active && (@queue.value.length > 0 || remote_sync_check == 0 || @sync_now)
           dir = nil
 
           @status.text = "Syncing..."
@@ -61,7 +61,16 @@ def check
       check_text = "Next check in #{sprintf("%.0d", SYNC_CHECK_TIME * remote_sync_check)} secs."
       @status.text = check_text
 
-      sleep SYNC_CHECK_TIME
+      if @active
+        sleep SYNC_CHECK_TIME
+      else
+        while !@active do
+          @status.text = "Syncing paused."
+          sleep SYNC_CHECK_TIME
+        end
+
+        remote_sync_check = SYNC_CHECK_COUNT
+      end
     end
   end
 end
@@ -151,6 +160,18 @@ menu = Qt::Menu.new
 sync_now = Qt::Action.new("Sync now", menu)
 sync_now.connect(SIGNAL :triggered) { @sync_now = true }
 
+@active = true
+
+def toggle_status(set = nil)
+  @active = set || !@active
+
+  @active_status.text = @active ? "Pause syncing" : "Resume syncing"
+  @current_icon = @active ? 'idle' : 'paused'
+end
+
+@active_status = Qt::Action.new("Pause syncing", menu)
+@active_status.connect(SIGNAL :triggered) { toggle_status }
+
 log = Qt::Action.new("View transfer log", menu)
 log.connect(SIGNAL :triggered) { system %{open #{TRANSFER_LOG}} }
 
@@ -160,6 +181,7 @@ quit = Qt::Action.new("Quit", menu)
 quit.connect(SIGNAL :triggered) { exiting = true }
 
 menu.addAction @status
+menu.addAction @active_status
 menu.addAction sync_now
 menu.addSeparator
 menu.addAction log
@@ -168,13 +190,14 @@ menu.addAction quit
 icon = Qt::SystemTrayIcon.new
 icon.contextMenu = menu
 
-@current_icon = 'idle'
+toggle_status true
 @prior_icon = nil
 
 check
 
 while !exiting
   log.enabled = File.file?(File.expand_path(TRANSFER_LOG))
+
   if @current_icon != @prior_icon
     icon.icon = Qt::Icon.new(File.expand_path("../../assets/#{@current_icon}.png", __FILE__))
 
