@@ -140,8 +140,16 @@ class UnisonWatcher < Qt::Application
     @active_status = Qt::Action.new("Pause syncing", @menu)
     @active_status.connect(SIGNAL :triggered) { toggle_status }
 
+    @current_log_size = File.size(File.expand_path(TRANSFER_LOG))
+
+    @fileview = Qt::TextEdit.new
+    @fileview.plainText = "Watching for changes..."
+    @fileview.readOnly = true
+    @fileview.resize 800, 600
+    @fileview.connect(SIGNAL :textChanged) { @fileview.moveCursor Qt::TextCursor::End }
+
     @log = Qt::Action.new("View transfer log", @menu)
-    @log.connect(SIGNAL :triggered) { system %{open #{TRANSFER_LOG}} }
+    @log.connect(SIGNAL :triggered) { @fileview.show }
 
     quit = Qt::Action.new("Quit", @menu)
     quit.connect(SIGNAL :triggered) { @exiting = true }
@@ -185,7 +193,6 @@ class UnisonWatcher < Qt::Application
   end
 
   def ui
-
     @icon = Qt::SystemTrayIcon.new
     @icon.contextMenu = menu
 
@@ -232,7 +239,13 @@ class UnisonWatcher < Qt::Application
         index = 0
         while !@done
           @current_icon = "working-#{index + 1}"
+          File.open(File.expand_path(TRANSFER_LOG), 'r') { |fh|
+            fh.seek(@current_log_size)
+            @fileview.plainText = fh.read
+          }
+
           update_ui
+
           break if @done
 
           sleep 0.25
@@ -244,6 +257,11 @@ class UnisonWatcher < Qt::Application
         @remote_sync_check = SYNC_CHECK_COUNT
         @sync_now = false
         @queue.update { [] }
+
+        File.open(File.expand_path(TRANSFER_LOG), 'r') { |fh|
+          fh.seek(@current_log_size)
+          @fileview.plainText = fh.read
+        }
       end
     rescue => e
       puts e.message
