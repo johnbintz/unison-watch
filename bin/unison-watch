@@ -5,10 +5,8 @@ require 'bundler/setup'
 require 'Qt4'
 require 'thread'
 require 'atomic'
-require 'daemons'
 
 ENV['PROFILE'] ||= 'default'
-
 
 class UnisonProfile
   def initialize(which = ENV['PROFILE'])
@@ -108,116 +106,141 @@ class UnisonWatcher < Qt::Application
     watcher[:app] = self
   end
 
-  def menu
-    menu = Qt::Menu.new
+  def update_status(status)
+    new_status = Qt::Action.new(status, @menu)
+    new_status.enabled = false
+    @menu.insertAction(@active_status, new_status)
+    @menu.removeAction(@status)
 
-    @status = Qt::Action.new("Unison watch idle.", menu)
+    @status = new_status
+  end
+
+  def menu
+    @menu = Qt::Menu.new
+
+    @current_text = 'Unison watch idle.'
+
+    @status = Qt::Action.new(@status_text, @menu)
     @status.enabled = false
 
-    sync_now = Qt::Action.new("Sync now", menu)
+    sync_now = Qt::Action.new("Sync now", @menu)
     sync_now.connect(SIGNAL :triggered) { @sync_now = true }
 
-    @active_status = Qt::Action.new("Pause syncing", menu)
+    @active_status = Qt::Action.new("Pause syncing", @menu)
     @active_status.connect(SIGNAL :triggered) { toggle_status }
 
-    @log = Qt::Action.new("View transfer log", menu)
+    @log = Qt::Action.new("View transfer log", @menu)
     @log.connect(SIGNAL :triggered) { system %{open #{TRANSFER_LOG}} }
 
-    quit = Qt::Action.new("Quit", menu)
+    quit = Qt::Action.new("Quit", @menu)
     quit.connect(SIGNAL :triggered) { @exiting = true }
 
-    menu.addAction @status
-    menu.addAction @active_status
-    menu.addAction sync_now
-    menu.addSeparator
-    menu.addAction @log
-    menu.addAction quit
+    @menu.addAction @active_status
+    @menu.addAction sync_now
+    @menu.addSeparator
+    @menu.addAction @log
+    @menu.addAction quit
 
-    menu
+    @current_text = 'Unison watch idle.'
+    update_status @current_text
+
+    @menu
+  end
+
+  def update_ui
+
+    if @current_icon != @prior_icon
+      if !@icons[@current_icon]
+        @icons[@current_icon] = Qt::Icon.new(File.expand_path("../../assets/#{@current_icon}.png", __FILE__))
+      end
+
+      @icon.icon = @icons[@current_icon]
+      @icon.show if !@prior_icon
+
+      @prior_icon = @current_icon
+    end
+
+    if @current_text!= @prior_text
+      update_status @current_text
+
+      @prior_text = @current_text
+    end
+
+    processEvents
   end
 
   def ui
-    icon = Qt::SystemTrayIcon.new
-    icon.contextMenu = menu
+    @icon = Qt::SystemTrayIcon.new
+    @icon.contextMenu = menu
 
     toggle_status true
     @prior_icon = nil
+    @prior_text = nil
+
+    s = nil
+
+    @icons = {}
+
+    @remote_sync_check = SYNC_CHECK_COUNT
 
     while !@exiting
-      @log.enabled = File.file?(File.expand_path(TRANSFER_LOG))
+      check
 
-      if @current_icon != @prior_icon
-        icon.icon = Qt::Icon.new(File.expand_path("../../assets/#{@current_icon}.png", __FILE__))
+      update_ui
 
-        if !@prior_icon
-          icon.show
-        end
-
-        @prior_icon = @current_icon
-      end
-
-      processEvents
-      sleep 0.1
+      sleep SYNC_CHECK_TIME
     end
   end
 
   def start
     watch
-    check
     ui
   end
 
   def check
-    remote_sync_check = SYNC_CHECK_COUNT
+    begin
+      if @active && (@queue.value.length > 0 || @remote_sync_check == 0 || @sync_now)
+        dir = nil
 
-    Thread.new do
-      while true do
-        begin
-          if @active && (@queue.value.length > 0 || remote_sync_check == 0 || @sync_now)
-            dir = nil
+        @current_text = "Syncing..."
 
-            @status.text = "Syncing..."
+        @done = false
 
-            animation = Thread.new do
-              while !Thread.current[:done] do
-                @current_icon = 'working-1'
-                sleep 0.25
-                @current_icon = 'working-2'
-                sleep 0.25
-              end
-
-              @current_icon = 'idle'
-            end
-
-            system %{bash -c 'unison -log -logfile #{TRANSFER_LOG} -batch #{ENV['PROFILE']}'}
-
-            animation[:done] = true
-
-            remote_sync_check = SYNC_CHECK_COUNT
-            @sync_now = false
-            @queue.update { [] }
-          end
-        rescue => e
-          puts e.message
-          puts e.backtrace.join("\n")
-          exit
+        runner = Thread.new do
+          system %{bash -c 'unison -log -logfile #{TRANSFER_LOG} -batch #{ENV['PROFILE']}'}
+          @done = true
         end
 
-        remote_sync_check -= 1
-        check_text = "Next check in #{sprintf("%.0d", SYNC_CHECK_TIME * remote_sync_check)} secs."
-        @status.text = check_text
+        while !@done
+          @current_icon = 'working-1'
+          update_ui
+          sleep 0.25
 
-        if @active
-          sleep SYNC_CHECK_TIME
-        else
-          while !@active do
-            @status.text = "Syncing paused."
-            sleep SYNC_CHECK_TIME
-          end
-
-          remote_sync_check = SYNC_CHECK_COUNT
+          @current_icon = 'working-2'
+          sleep 0.25
+          update_ui
         end
+
+        @current_icon = 'idle'
+
+        @remote_sync_check = SYNC_CHECK_COUNT
+        @sync_now = false
+        @queue.update { [] }
       end
+    rescue => e
+      puts e.message
+      puts e.backtrace.join("\n")
+      exit
+    end
+
+    @remote_sync_check -= 1
+
+    if @active
+      @current_text = "Next check in #{sprintf("%.0d", SYNC_CHECK_TIME * @remote_sync_check)} secs."
+    else
+      @current_text = "Syncing paused."
+
+      @remote_sync_check = SYNC_CHECK_COUNT
     end
   end
 

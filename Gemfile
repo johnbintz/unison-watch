@@ -11,5 +11,4 @@ when /linux/
 end
 
 gem 'atomic'
-gem 'daemons'
 
