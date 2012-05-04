@@ -157,7 +157,10 @@ class UnisonWatcher < Qt::Application
       end
 
       @icon.icon = @icons[@current_icon]
-      @icon.show if !@prior_icon
+      @icon.toolTip = "Unison Agent\nUsing #{ENV['PROFILE']} profile"
+      if !@prior_icon
+        @icon.show
+      end
 
       @prior_icon = @current_icon
     end
