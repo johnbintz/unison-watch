@@ -88,6 +88,8 @@ class UnisonWatcher < Qt::Application
           require 'rb-inotify'
           @watch = INotify::Notifier.new
           Thread.current[:paths].each do |path|
+            FileUtils.mkdir_p path
+
             @watch.watch path, :recursive, :modify, :create, :delete do |event|
               Thread.current[:app] << event.absolute_name
             end
