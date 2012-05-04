@@ -11,4 +11,4 @@ when /linux/
 end
 
 gem 'atomic'
-
+gem 'thor'
