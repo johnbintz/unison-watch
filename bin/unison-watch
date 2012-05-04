@@ -5,11 +5,14 @@ require 'bundler/setup'
 require 'Qt4'
 require 'thread'
 require 'atomic'
-
-ENV['PROFILE'] ||= 'default'
+require 'thor'
 
 class UnisonProfile
-  def initialize(which = ENV['PROFILE'])
+  def self.process(profiles)
+    profiles.collect { |profile| new(profile) }
+  end
+
+  def initialize(which)
     @which = which
   end
 
@@ -41,6 +44,10 @@ class UnisonProfile
     @paths ||= lines.find_all { |line| line[%r{^path}] }.collect { |line| value_of(line) }
   end
 
+  def paths_with_local_root
+    paths.collect { |path| File.join(local_root, path) }
+  end
+
   def value_of(line)
     line[%r{=(.*)$}, 1].strip
   end
@@ -51,10 +58,12 @@ class UnisonWatcher < Qt::Application
   SYNC_CHECK_COUNT = 600
   SYNC_CHECK_TIME = 0.1
 
-  def initialize(*args)
+  def initialize(profiles, *args)
     super(*args)
 
+    @profiles = profiles
     @queue = Atomic.new([])
+
     @sync_now = false
     @exiting = false
     @active = true
@@ -64,8 +73,8 @@ class UnisonWatcher < Qt::Application
     @queue.update { |q| q += [ dirs ].flatten ; q }
   end
 
-  def profile
-    @profile ||= UnisonProfile.new
+  def processed_profiles
+    @processed_profiles ||= UnisonProfile.process(@profiles)
   end
 
   def watch
@@ -104,7 +113,7 @@ class UnisonWatcher < Qt::Application
       end
     end
 
-    watcher[:paths] = profile.paths.collect { |path| File.join(profile.local_root, path) }
+    watcher[:paths] = processed_profiles.collect(&:paths_with_local_root).flatten
     watcher[:app] = self
   end
 
@@ -150,14 +159,15 @@ class UnisonWatcher < Qt::Application
   end
 
   def update_ui
-
     if @current_icon != @prior_icon
       if !@icons[@current_icon]
         @icons[@current_icon] = Qt::Icon.new(File.expand_path("../../assets/#{@current_icon}.png", __FILE__))
+        @icons["large-#{@current_icon}"] = Qt::Icon.new(File.expand_path("../../assets/large-#{@current_icon}.png", __FILE__))
       end
 
       @icon.icon = @icons[@current_icon]
-      @icon.toolTip = "Unison Agent\nUsing #{ENV['PROFILE']} profile"
+      self.windowIcon = @icons["large-#{@current_icon}"]
+      @icon.toolTip = "Unison Agent\nUsing #{@profiles.join(', ')} profile"
       if !@prior_icon
         @icon.show
       end
@@ -175,14 +185,13 @@ class UnisonWatcher < Qt::Application
   end
 
   def ui
+
     @icon = Qt::SystemTrayIcon.new
     @icon.contextMenu = menu
 
     toggle_status true
     @prior_icon = nil
     @prior_text = nil
-
-    s = nil
 
     @icons = {}
 
@@ -198,6 +207,8 @@ class UnisonWatcher < Qt::Application
   end
 
   def start
+    self.objectName = "cats"
+
     watch
     ui
   end
@@ -212,18 +223,20 @@ class UnisonWatcher < Qt::Application
         @done = false
 
         runner = Thread.new do
-          system %{bash -c 'unison -log -logfile #{TRANSFER_LOG} -batch #{ENV['PROFILE']}'}
+          @profiles.each do |profile|
+            system %{bash -c 'unison -log -logfile #{TRANSFER_LOG} -batch #{profile}'}
+          end
           @done = true
         end
 
+        index = 0
         while !@done
-          @current_icon = 'working-1'
+          @current_icon = "working-#{index + 1}"
           update_ui
-          sleep 0.25
+          break if @done
 
-          @current_icon = 'working-2'
           sleep 0.25
-          update_ui
+          index = (index + 1) % 2
         end
 
         @current_icon = 'idle'
@@ -257,5 +270,18 @@ class UnisonWatcher < Qt::Application
   end
 end
 
-UnisonWatcher.new(ARGV).start
+class UnisonCLI < Thor
+  desc 'start profile <profile> ...', 'Run Unison Watch using the provided profiles'
+  def start(*profiles)
+    UnisonWatcher.new(profiles, ARGV).start
+  end
+
+  default_task :run
+
+  def method_missing(*args)
+    start(*args)
+  end
+end
+
+UnisonCLI.start
 
