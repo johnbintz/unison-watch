@@ -1,7 +1,13 @@
 module Unison
   class Profile
+    PROFILE_DIR = File.expand_path('~/.unison')
+
     def self.process(profiles)
       profiles.collect { |profile| new(profile) }
+    end
+
+    def self.available
+      Dir[File.join(PROFILE_DIR, '*.prf')].collect { |file| File.basename(file).gsub('.prf', '') }.sort
     end
 
     def initialize(which)

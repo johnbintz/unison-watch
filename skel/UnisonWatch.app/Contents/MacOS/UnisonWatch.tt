@@ -1,0 +1,5 @@
+#!/bin/bash
+
+cd <%= gem_directory %>
+GEM_HOME=<%= ENV['GEM_HOME'] %> GEM_PATH=<%= ENV['GEM_PATH'] %> PATH=<%= `which ruby`.gsub(%r{/[^/]+$}, '') %>:$PATH bin/unison-watch
+

@@ -1,6 +1,6 @@
 source :rubygems
+gemspec
 
-gem 'qtbindings'
 require 'rbconfig'
 
 case RbConfig::CONFIG['host_os']
@@ -10,5 +10,3 @@ when /linux/
   gem 'rb-inotify'
 end
 
-gem 'atomic'
-gem 'thor'
