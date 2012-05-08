@@ -21,8 +21,8 @@ module Unison
       def generate
         generate_status
 
-        sync_now = Qt::Action.new(SYNC_NOW, self)
-        sync_now.connect(SIGNAL(:triggered), &@on[:sync_now])
+        @sync_now = Qt::Action.new(SYNC_NOW, self)
+        @sync_now.connect(SIGNAL(:triggered), &@on[:sync_now])
 
         @active_status = Qt::Action.new(PAUSE_SYNCING, self)
         @active_status.connect(SIGNAL(:triggered), &@on[:toggle_status])
@@ -33,15 +33,15 @@ module Unison
         @preferences = Qt::Action.new('Preferences...', @menu)
         @preferences.connect(SIGNAL(:triggered), &@on[:preferences])
 
-        quit = Qt::Action.new(QUIT, @menu)
-        quit.connect(SIGNAL(:triggered), &@on[:quit])
+        @quit = Qt::Action.new(QUIT, @menu)
+        @quit.connect(SIGNAL(:triggered), &@on[:quit])
 
         addAction @active_status
-        addAction sync_now
+        addAction @sync_now
         addSeparator
         addAction @log
         addAction @preferences
-        addAction quit
+        addAction @quit
       end
 
       def status_text=(text)

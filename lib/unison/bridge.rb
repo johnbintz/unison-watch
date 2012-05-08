@@ -12,14 +12,15 @@ module Unison
       Thread.new do
         begin
           @profiles.each do |profile|
-            system %{bash -c 'unison -log -logfile #{@log} -batch #{profile} 2>>#{@log.stderr} >>#{@log.stdout}'}
+            #system %{bash -c 'unison -log -logfile #{@log} -batch #{profile} 2>>#{@log}.stderr >>#{@log}.stdout'}
+            system %{bash -c 'unison -log -logfile #{@log} -batch #{profile}'}
           end
 
           block.call
         rescue => e
           puts e.message
           puts e.backtrace.join("\n")
-          raise e
+          exit 1
         end
       end
     end
