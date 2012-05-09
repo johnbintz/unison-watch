@@ -3,7 +3,6 @@ require 'forwardable'
 module Unison
   class Watcher < Qt::Application
     TRANSFER_LOG = '~/unison.log'
-    SYNC_CHECK_COUNT = 600
     SYNC_CHECK_TIME = 0.1
 
     extend Forwardable
@@ -18,7 +17,13 @@ module Unison
       @sync_now = false
       @exiting = false
       @active = true
-      end
+
+      @config.on_update { @remote_sync_check = time_between_checks }
+    end
+
+    def time_between_checks
+      @config.time_between_checks * 10
+    end
 
     def <<(dirs)
       @queue.update { |q| q += [ dirs ].flatten ; q }
@@ -73,7 +78,7 @@ module Unison
 
       @icons = {}
 
-      @remote_sync_check = SYNC_CHECK_COUNT
+      @remote_sync_check = time_between_checks
 
       while !@exiting
         check
@@ -128,7 +133,7 @@ module Unison
 
           show_working
 
-          @remote_sync_check = SYNC_CHECK_COUNT
+          @remote_sync_check = time_between_checks
           @sync_now = false
           @queue.update { [] }
         end
@@ -145,7 +150,7 @@ module Unison
       else
         @current_text = "Syncing paused."
 
-        @remote_sync_check = SYNC_CHECK_COUNT
+        @remote_sync_check = time_between_checks
       end
     end
 
