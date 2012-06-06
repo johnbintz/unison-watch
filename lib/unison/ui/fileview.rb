@@ -15,6 +15,11 @@ module Unison
         self.connect(SIGNAL(:textChanged), &method(:on_text_change))
       end
 
+      def show
+        super
+        self.raise
+      end
+
       def on_text_change
         self.moveCursor Qt::TextCursor::End
       end

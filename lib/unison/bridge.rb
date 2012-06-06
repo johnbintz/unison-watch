@@ -4,16 +4,19 @@ module Unison
       new(*args).run(&block)
     end
 
-    def initialize(profiles, log)
-      @profiles, @log = profiles, log
+    def initialize(config, log)
+      @config, @log = config, log
     end
 
     def run(&block)
       Thread.new do
         begin
-          @profiles.each do |profile|
-            #system %{bash -c 'unison -log -logfile #{@log} -batch #{profile} 2>>#{@log}.stderr >>#{@log}.stdout'}
-            system %{bash -c 'unison -log -logfile #{@log} -batch #{profile}'}
+          @config.profiles.each do |profile|
+            system %{bash -c '#{@config.unison_binary} -ui text -log -logfile #{@log} -batch #{profile}'}
+
+            if $?.exitstatus != 0
+              system %{bash -c '#{@config.unison_binary} -ui graphic #{profile}'}
+            end
           end
 
           block.call

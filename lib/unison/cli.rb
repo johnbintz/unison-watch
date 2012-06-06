@@ -30,6 +30,8 @@ module Unison
       end
 
       File.chmod(0755, "UnisonWatch.app/Contents/MacOS/UnisonWatch")
+
+      system %{bin/setfileicon assets/unison.icns UnisonWatch.app}
     end
 
     no_tasks do

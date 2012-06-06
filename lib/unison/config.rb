@@ -14,7 +14,11 @@ module Unison
     end
 
     def self.skel_data
-      { 'profiles' => [], 'time_between_checks' => DEFAULT_TIME_BETWEEN_CHECKS }
+      {
+        'profiles' => [],
+        'time_between_checks' => DEFAULT_TIME_BETWEEN_CHECKS,
+        'unison_binary' => '/usr/bin/unison'
+      }
     end
 
     def set_profile(profile, is_set)
@@ -60,6 +64,15 @@ module Unison
       time = DEFAULT_TIME_BETWEEN_CHECKS if time <= 10
 
       data['time_between_checks'] = time
+      save
+    end
+
+    def unison_binary
+      data['unison_binary']
+    end
+
+    def unison_binary=(binary)
+      data['unison_binary'] = binary
       save
     end
 

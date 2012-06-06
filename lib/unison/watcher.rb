@@ -3,11 +3,10 @@ require 'forwardable'
 module Unison
   class Watcher < Qt::Application
     TRANSFER_LOG = '~/unison.log'
-    SYNC_CHECK_TIME = 0.1
+    SYNC_CHECK_TIME = 0.05
 
     extend Forwardable
 
-    def_delegators :@config, :profiles
     def initialize(profiles, *args)
       super(*args)
 
@@ -22,7 +21,7 @@ module Unison
     end
 
     def time_between_checks
-      @config.time_between_checks * 10
+      @config.time_between_checks * 20
     end
 
     def <<(dirs)
@@ -30,7 +29,7 @@ module Unison
     end
 
     def processed_profiles
-      @processed_profiles ||= Unison::Profile.process(profiles)
+      @processed_profiles ||= Unison::Profile.process(@config.profiles)
     end
 
     def watch
@@ -68,7 +67,7 @@ module Unison
     end
 
     def ui
-      @icon = Unison::UI::Icon.new(menu, self, profiles, File.join(Unison.root, 'assets'))
+      @icon = Unison::UI::Icon.new(menu, self, @config.profiles, File.join(Unison.root, 'assets'))
       @config.on_update { @icon.profiles = @config.profiles }
 
       @current_icon = 'idle'
@@ -129,7 +128,7 @@ module Unison
 
           @done = false
 
-          Unison::Bridge.run(profiles, TRANSFER_LOG) { @done = true }
+          Unison::Bridge.run(@config, TRANSFER_LOG) { @done = true }
 
           show_working
 

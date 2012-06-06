@@ -9,6 +9,11 @@ module Unison
         generate
       end
 
+      def show
+        super
+        self.raise
+      end
+
       def generate
         layout = Qt::GridLayout.new
 
@@ -35,8 +40,14 @@ module Unison
         count_field = Qt::LineEdit.new(@config.time_between_checks.to_s)
         count_field.connect(SIGNAL "textChanged(QString)") { |string| @config.time_between_checks = string.to_i }
 
+        binary_label = Qt::Label.new("Unison binary:")
+        binary_field = Qt::LineEdit.new(@config.unison_binary)
+        binary_field.connect(SIGNAL "textChanged(QString)") { |string| @config.unison_binary = string }
+
         fields_layout.addWidget(count_label, 0, 0)
         fields_layout.addWidget(count_field, 0, 1)
+        fields_layout.addWidget(binary_label, 1, 0)
+        fields_layout.addWidget(binary_field, 1, 1)
         performance_group_layout.addWidget(fields)
 
         layout.addWidget(profile_group, 0, 0)
