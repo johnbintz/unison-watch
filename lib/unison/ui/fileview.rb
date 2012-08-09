@@ -7,7 +7,7 @@ module Unison
         super(*args)
 
         @file = file
-        @current_log_size = File.size(@file)
+        @current_log_size = File.exist?(@file) ? File.size(@file) : 0
 
         self.plainText = INITIAL
         self.readOnly = true
